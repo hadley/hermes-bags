@@ -1,137 +1,73 @@
 # Pass 2: strip each raw product HTML down to just the product information.
 #
 # Reads 01-html-product/*.html (full WordPress page with header/footer/scripts/
-# styles/related products) and writes 02-html-product/*.html containing only
-# what 03-extract.R needs. All attributes except `class` are stripped; data
-# that lived in attributes (gtm4wp JSON, tab ids) is re-emitted as semantic
-# class-tagged elements.
+# styles/related products) and writes 02-html-product/*.html containing just
+# the title, price, short description, and the .resp-tabs-container block.
+# Only `class` and `id` attributes survive.
+#
+# Assumes that the files are all generated from a CMS so they have exactly
+# the same structure and no error handling is needed.
 
 library(rvest)
 library(xml2)
-library(jsonlite)
+library(purrr)
 
 raw_dir <- "01-html-product"
 out_dir <- "02-html-product"
 dir.create(out_dir, showWarnings = FALSE)
 
-serialize <- function(x) if (length(x) == 0 || is.na(x)) "" else as.character(x)
-
-escape_html <- function(x) {
-  x <- gsub("&", "&amp;", x, fixed = TRUE)
-  x <- gsub("<", "&lt;", x, fixed = TRUE)
-  x <- gsub(">", "&gt;", x, fixed = TRUE)
-  x <- gsub('"', "&quot;", x, fixed = TRUE)
-  x
-}
-
 prune_attrs <- function(doc) {
   for (n in xml_find_all(doc, "//*")) {
-    cls <- xml_attr(n, "class")
-    if (is.na(cls)) {
-      xml_set_attrs(n, character(0))
-    } else {
-      xml_set_attrs(n, c(class = cls))
-    }
+    keep <- c(class = xml_attr(n, "class"), id = xml_attr(n, "id"))
+    keep <- keep[!is.na(keep)]
+    xml_set_attrs(n, keep)
   }
   doc
 }
 
-gtm_to_html <- function(json_str) {
-  if (length(json_str) == 0 || is.na(json_str)) {
-    return("")
+# libxml2's "format" save option only re-indents element-only content, so any
+# whitespace text node from the source HTML blocks reformatting of its parent.
+# Strip whitespace-only text nodes outright; for mixed-content text, collapse
+# whitespace runs that contain \t or \n (those are source indentation; real
+# inline spaces are single 0x20 chars).
+normalize_whitespace <- function(doc) {
+  xml_remove(xml_find_all(doc, "//text()[normalize-space()='']"))
+  for (t in xml_find_all(doc, "//text()")) {
+    v <- xml_text(t)
+    v2 <- sub("^[ \t\n]*[\t\n][ \t\n]*", "", v)
+    v2 <- sub("[ \t\n]*[\t\n][ \t\n]*$", "", v2)
+    v2 <- gsub("[ \t\n]*[\t\n][ \t\n]*", " ", v2)
+    if (!identical(v2, v)) xml_text(t) <- v2
   }
-  dat <- tryCatch(fromJSON(json_str), error = function(e) NULL)
-  if (is.null(dat)) {
-    return("")
-  }
-  fields <- c(
-    sku = "sku",
-    `item-id` = "item_id",
-    `stock-status` = "stockstatus",
-    `stock-level` = "stocklevel",
-    category = "item_category"
-  )
-  parts <- vapply(
-    names(fields),
-    function(cls) {
-      val <- dat[[fields[[cls]]]]
-      if (is.null(val) || length(val) == 0) {
-        return("")
-      }
-      sprintf('<span class="%s">%s</span>', cls, escape_html(as.character(val)))
-    },
-    character(1)
-  )
-  parts <- parts[nzchar(parts)]
-  if (!length(parts)) {
-    return("")
-  }
-  paste0('<div class="product-data">', paste(parts, collapse = ""), "</div>")
-}
-
-inner_html <- function(el) {
-  if (is.na(el)) {
-    return("")
-  }
-  paste(vapply(xml_contents(el), as.character, character(1)), collapse = "")
-}
-
-wrap_tab <- function(doc, sel, cls) {
-  el <- html_element(doc, sel)
-  if (is.na(el)) {
-    return("")
-  }
-  sprintf('<div class="tab-content %s">%s</div>', cls, inner_html(el))
+  doc
 }
 
 clean_one <- function(file_in, file_out) {
   doc <- read_html(file_in)
 
-  product_div <- html_element(doc, "div[id^='product-'].product")
-  product_classes <- if (!is.na(product_div)) {
-    html_attr(product_div, "class")
-  } else {
-    ""
-  }
-  gtm_val <- html_attr(
-    html_element(doc, "input[name='gtm4wp_product_data']"),
-    "value"
+  html_str <- paste0(
+    "<!DOCTYPE html>",
+    "<html><body>",
+    "<div>",
+    as.character(html_elements(doc, "h2.product_title")),
+    as.character(html_elements(doc, ".single-product-price")),
+    as.character(html_elements(doc, ".description")),
+    as.character(html_elements(doc, ".resp-tabs-container")),
+    "</div>",
+    "</body></html>"
   )
 
-  body_bits <- c(
-    sprintf('<div class="%s">', product_classes),
-    gtm_to_html(gtm_val),
-    serialize(html_element(doc, "h2.product_title")),
-    serialize(html_element(doc, ".single-product-price")),
-    serialize(html_element(
-      doc,
-      ".woocommerce-product-details__short-description"
-    )),
-    wrap_tab(doc, "#tab-custom_tab1", "tab-description"),
-    wrap_tab(doc, "#tab-custom_tab2", "tab-size"),
-    wrap_tab(doc, "#tab-custom_tab3", "tab-delivery"),
-    "</div>"
-  )
+  cleaned <- prune_attrs(normalize_whitespace(read_html(html_str)))
 
-  html_str <- paste(
-    c("<!DOCTYPE html>", "<html><body>", body_bits, "</body></html>"),
-    collapse = "\n"
+  # Force nice indenting
+  write_xml(
+    cleaned,
+    file_out,
+    options = c("format", "as_xml", "no_declaration")
   )
-  cleaned <- prune_attrs(read_html(html_str))
-  write_html(cleaned, file_out, format = TRUE)
 }
 
-files <- list.files(raw_dir, pattern = "\\.html$", full.names = TRUE)
-message("cleaning ", length(files), " files")
+paths_in <- list.files(raw_dir, pattern = "\\.html$", full.names = TRUE)
+paths_out <- file.path(out_dir, basename(paths_in))
 
-for (f in files) {
-  out <- file.path(out_dir, basename(f))
-  if (file.exists(out)) {
-    next
-  }
-  tryCatch(clean_one(f, out), error = function(e) {
-    message("  failed: ", basename(f), " – ", conditionMessage(e))
-  })
-}
-
-message("done.")
+map2(paths_in, paths_out, clean_one, .progress = "Cleaning")

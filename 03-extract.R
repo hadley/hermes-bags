@@ -22,16 +22,16 @@ extract_one <- function(file) {
     title = doc |> html_element("h2.product_title") |> html_text(),
     price = price,
     short_description = doc |>
-      html_element(".woocommerce-product-details__short-description") |>
+      html_element(".description") |>
       html_text(trim = TRUE),
     description = doc |>
-      html_element(".tab-content.tab-description") |>
+      html_element("#tab-custom_tab1") |>
       html_text(trim = TRUE),
     size = doc |>
-      html_element(".tab-content.tab-size") |>
+      html_element("#tab-custom_tab2") |>
       html_text(trim = TRUE)
   )
 }
 rows <- map(files, extract_one, .progress = TRUE)
 
-write_parquet(rows |> list_rbind(), "03-hermes-bags.parquet")
+write_parquet(list_rbind(rows), "03-hermes-bags.parquet")
