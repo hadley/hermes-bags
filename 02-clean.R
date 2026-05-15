@@ -17,10 +17,10 @@ dir.create(out_dir, showWarnings = FALSE)
 serialize <- function(x) if (length(x) == 0 || is.na(x)) "" else as.character(x)
 
 escape_html <- function(x) {
-  x <- gsub("&",  "&amp;",  x, fixed = TRUE)
-  x <- gsub("<",  "&lt;",   x, fixed = TRUE)
-  x <- gsub(">",  "&gt;",   x, fixed = TRUE)
-  x <- gsub('"',  "&quot;", x, fixed = TRUE)
+  x <- gsub("&", "&amp;", x, fixed = TRUE)
+  x <- gsub("<", "&lt;", x, fixed = TRUE)
+  x <- gsub(">", "&gt;", x, fixed = TRUE)
+  x <- gsub('"', "&quot;", x, fixed = TRUE)
   x
 }
 
@@ -37,50 +37,76 @@ prune_attrs <- function(doc) {
 }
 
 gtm_to_html <- function(json_str) {
-  if (length(json_str) == 0 || is.na(json_str)) return("")
+  if (length(json_str) == 0 || is.na(json_str)) {
+    return("")
+  }
   dat <- tryCatch(fromJSON(json_str), error = function(e) NULL)
-  if (is.null(dat)) return("")
+  if (is.null(dat)) {
+    return("")
+  }
   fields <- c(
-    sku            = "sku",
-    `item-id`      = "item_id",
+    sku = "sku",
+    `item-id` = "item_id",
     `stock-status` = "stockstatus",
-    `stock-level`  = "stocklevel",
-    category       = "item_category"
+    `stock-level` = "stocklevel",
+    category = "item_category"
   )
-  parts <- vapply(names(fields), function(cls) {
-    val <- dat[[fields[[cls]]]]
-    if (is.null(val) || length(val) == 0) return("")
-    sprintf('<span class="%s">%s</span>', cls, escape_html(as.character(val)))
-  }, character(1))
+  parts <- vapply(
+    names(fields),
+    function(cls) {
+      val <- dat[[fields[[cls]]]]
+      if (is.null(val) || length(val) == 0) {
+        return("")
+      }
+      sprintf('<span class="%s">%s</span>', cls, escape_html(as.character(val)))
+    },
+    character(1)
+  )
   parts <- parts[nzchar(parts)]
-  if (!length(parts)) return("")
+  if (!length(parts)) {
+    return("")
+  }
   paste0('<div class="product-data">', paste(parts, collapse = ""), "</div>")
 }
 
 inner_html <- function(el) {
-  if (is.na(el)) return("")
+  if (is.na(el)) {
+    return("")
+  }
   paste(vapply(xml_contents(el), as.character, character(1)), collapse = "")
 }
 
 wrap_tab <- function(doc, sel, cls) {
   el <- html_element(doc, sel)
-  if (is.na(el)) return("")
+  if (is.na(el)) {
+    return("")
+  }
   sprintf('<div class="tab-content %s">%s</div>', cls, inner_html(el))
 }
 
 clean_one <- function(file_in, file_out) {
   doc <- read_html(file_in)
 
-  product_div     <- html_element(doc, "div[id^='product-'].product")
-  product_classes <- if (!is.na(product_div)) html_attr(product_div, "class") else ""
-  gtm_val         <- html_attr(html_element(doc, "input[name='gtm4wp_product_data']"), "value")
+  product_div <- html_element(doc, "div[id^='product-'].product")
+  product_classes <- if (!is.na(product_div)) {
+    html_attr(product_div, "class")
+  } else {
+    ""
+  }
+  gtm_val <- html_attr(
+    html_element(doc, "input[name='gtm4wp_product_data']"),
+    "value"
+  )
 
   body_bits <- c(
     sprintf('<div class="%s">', product_classes),
     gtm_to_html(gtm_val),
     serialize(html_element(doc, "h2.product_title")),
     serialize(html_element(doc, ".single-product-price")),
-    serialize(html_element(doc, ".woocommerce-product-details__short-description")),
+    serialize(html_element(
+      doc,
+      ".woocommerce-product-details__short-description"
+    )),
     wrap_tab(doc, "#tab-custom_tab1", "tab-description"),
     wrap_tab(doc, "#tab-custom_tab2", "tab-size"),
     wrap_tab(doc, "#tab-custom_tab3", "tab-delivery"),
@@ -100,7 +126,9 @@ message("cleaning ", length(files), " files")
 
 for (f in files) {
   out <- file.path(out_dir, basename(f))
-  if (file.exists(out)) next
+  if (file.exists(out)) {
+    next
+  }
   tryCatch(clean_one(f, out), error = function(e) {
     message("  failed: ", basename(f), " – ", conditionMessage(e))
   })

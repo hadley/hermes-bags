@@ -91,10 +91,10 @@ chat <- chat_anthropic(
 # Anthropic's Message Batches API: ~50% cheaper than parallel calls,
 # completes asynchronously (usually minutes; up to 24h).
 extracted <- batch_chat_structured(
-  chat    = chat,
+  chat = chat,
   prompts = as.list(titles),
-  type    = type_bag,
-  path    = "04-extracted-titles.json"
+  type = type_bag,
+  path = "04-extracted-titles.json"
 )
 
 parsed_titles <- tibble(title = titles) |>
@@ -113,9 +113,9 @@ split_components <- function(x) {
   unique(out)
 }
 
-all_colours  <- split_components(parsed_titles$colour)
+all_colours <- split_components(parsed_titles$colour)
 all_leathers <- split_components(parsed_titles$leather)
-message("unique colour components: ",  length(all_colours))
+message("unique colour components: ", length(all_colours))
 message("unique leather components: ", length(all_leathers))
 
 type_simple_colour <- type_object(
@@ -151,22 +151,28 @@ chat_simple <- chat_anthropic(
 )
 
 colour_simple <- batch_chat_structured(
-  chat    = chat_simple,
+  chat = chat_simple,
   prompts = as.list(all_colours),
-  type    = type_simple_colour,
-  path    = "04-simplified-colours.json"
+  type = type_simple_colour,
+  path = "04-simplified-colours.json"
 )
 leather_simple <- batch_chat_structured(
-  chat    = chat_simple,
+  chat = chat_simple,
   prompts = as.list(all_leathers),
-  type    = type_simple_leather,
-  path    = "04-simplified-leathers.json"
+  type = type_simple_leather,
+  path = "04-simplified-leathers.json"
 )
 
-colour_lookup  <- tibble(colour  = all_colours,  simple_colour  = colour_simple$simple)
-leather_lookup <- tibble(leather = all_leathers, simple_leather = leather_simple$simple)
+colour_lookup <- tibble(
+  colour = all_colours,
+  simple_colour = colour_simple$simple
+)
+leather_lookup <- tibble(
+  leather = all_leathers,
+  simple_leather = leather_simple$simple
+)
 
-write_parquet(colour_lookup,  "04-simplified-colours.parquet")
+write_parquet(colour_lookup, "04-simplified-colours.parquet")
 write_parquet(leather_lookup, "04-simplified-leathers.parquet")
 
 # ---- (c) join back to the full table ---------------------------------------
@@ -185,9 +191,18 @@ classify_condition <- function(x) {
   s <- tolower(x)
   case_when(
     is.na(s) ~ NA_character_,
-    stringr::str_detect(s, "box[- ]?fresh|as new|never used|unworn|brand new") ~ "Box Fresh",
-    stringr::str_detect(s, "excellent\\s+pre[- ]?loved|excellent preloved") ~ "Excellent Pre-Loved",
-    stringr::str_detect(s, "pre[- ]?loved|preloved|pre[- ]?owned") ~ "Pre-Loved",
+    stringr::str_detect(
+      s,
+      "box[- ]?fresh|as new|never used|unworn|brand new"
+    ) ~ "Box Fresh",
+    stringr::str_detect(
+      s,
+      "excellent\\s+pre[- ]?loved|excellent preloved"
+    ) ~ "Excellent Pre-Loved",
+    stringr::str_detect(
+      s,
+      "pre[- ]?loved|preloved|pre[- ]?owned"
+    ) ~ "Pre-Loved",
     TRUE ~ NA_character_
   )
 }
@@ -202,7 +217,7 @@ has_phrase <- function(x, pos, neg) {
   case_when(
     neg_hit ~ FALSE,
     pos_hit ~ TRUE,
-    TRUE    ~ NA
+    TRUE ~ NA
   )
 }
 
@@ -225,17 +240,23 @@ classify_full_set <- function(x) {
 out <- d |>
   left_join(parsed_titles, by = "title") |>
   mutate(
-    width_cm        = as.integer(round(as.numeric(dims[, 2]))),
-    height_cm       = as.integer(round(as.numeric(dims[, 3]))),
-    depth_cm        = as.integer(round(as.numeric(dims[, 4]))),
-    primary_colour  = first_component(colour),
+    width_cm = as.integer(round(as.numeric(dims[, 2]))),
+    height_cm = as.integer(round(as.numeric(dims[, 3]))),
+    depth_cm = as.integer(round(as.numeric(dims[, 4]))),
+    primary_colour = first_component(colour),
     primary_leather = first_component(leather),
-    condition       = classify_condition(short_description),
-    has_receipt     = classify_receipt(description),
-    full_set        = classify_full_set(description)
+    condition = classify_condition(short_description),
+    has_receipt = classify_receipt(description),
+    full_set = classify_full_set(description)
   ) |>
-  left_join(colour_lookup,  by = c(primary_colour  = "colour")) |>
+  left_join(colour_lookup, by = c(primary_colour = "colour")) |>
   left_join(leather_lookup, by = c(primary_leather = "leather"))
 
 write_parquet(out, "04-hermes-bags.parquet")
-message("wrote 04-hermes-bags.parquet (", nrow(out), " rows, ", ncol(out), " cols)")
+message(
+  "wrote 04-hermes-bags.parquet (",
+  nrow(out),
+  " rows, ",
+  ncol(out),
+  " cols)"
+)

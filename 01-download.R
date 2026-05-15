@@ -1,7 +1,7 @@
 # Pass 1: download every Hermès product page from loveluxury.co.uk via chromote.
 #
 # Cloudflare blocks headless + libcurl requests, so we drive a HEADED Chrome
-# you launch yourself, and attach chromote to it. 
+# you launch yourself, and attach chromote to it.
 #
 # --- one-time setup --------------------------------------------------------
 # In a terminal, launch Chrome with remote debugging enabled:
@@ -18,11 +18,11 @@ library(chromote)
 library(rvest)
 library(purrr)
 
-base_url    <- "https://loveluxury.co.uk/shop/hermes/"
+base_url <- "https://loveluxury.co.uk/shop/hermes/"
 listing_dir <- "01-html-listing"
 product_dir <- "01-html-product"
-urls_file   <- "01-product-urls.txt"
-debug_port  <- 9333
+urls_file <- "01-product-urls.txt"
+debug_port <- 9333
 
 dir.create(listing_dir, showWarnings = FALSE)
 dir.create(product_dir, showWarnings = FALSE)
@@ -33,8 +33,11 @@ chrome <- ChromeRemote$new(host = "127.0.0.1", port = debug_port)
 b <- ChromoteSession$new(parent = Chromote$new(browser = chrome))
 
 b$Page$navigate(base_url)
-cat("\n>>> Solve the Cloudflare challenge in the Chrome window if shown,\n",
-    "    wait until the Hermès listing is visible, then press <Return>.\n", sep = "")
+cat(
+  "\n>>> Solve the Cloudflare challenge in the Chrome window if shown,\n",
+  "    wait until the Hermès listing is visible, then press <Return>.\n",
+  sep = ""
+)
 readline()
 
 fetch <- function(url, settle = 2) {
@@ -45,7 +48,9 @@ fetch <- function(url, settle = 2) {
   if (grepl("Just a moment|cf-challenge|Enable JavaScript and cookies", html)) {
     cat("\n>>> Cloudflare challenge detected. Solve it, then press <Return>.\n")
     readline()
-    html <- b$Runtime$evaluate("document.documentElement.outerHTML")$result$value
+    html <- b$Runtime$evaluate(
+      "document.documentElement.outerHTML"
+    )$result$value
   }
   html
 }
@@ -61,7 +66,8 @@ n_pages_total <- function(file) {
   nums <- doc |>
     html_elements("a.page-numbers") |>
     html_attr("href") |>
-    stringr::str_match("/page/(\\d+)/") |> _[, 2] |>
+    stringr::str_match("/page/(\\d+)/") |>
+    _[, 2] |>
     as.integer()
   max(c(1L, nums), na.rm = TRUE)
 }
@@ -77,7 +83,9 @@ message("total listing pages: ", n_pages)
 
 for (p in seq_len(n_pages)) {
   dest <- file.path(listing_dir, sprintf("page-%03d.html", p))
-  if (file.exists(dest)) next
+  if (file.exists(dest)) {
+    next
+  }
   message("listing page ", p, "/", n_pages)
   writeLines(fetch(listing_url(p)), dest)
 }
@@ -94,10 +102,20 @@ extract_product_urls <- function(file) {
   unique(hrefs)
 }
 
-listing_files <- list.files(listing_dir, pattern = "\\.html$", full.names = TRUE)
-product_urls  <- unique(unlist(map(listing_files, extract_product_urls)))
+listing_files <- list.files(
+  listing_dir,
+  pattern = "\\.html$",
+  full.names = TRUE
+)
+product_urls <- unique(unlist(map(listing_files, extract_product_urls)))
 writeLines(product_urls, urls_file)
-message("found ", length(product_urls), " product URLs (saved to ", urls_file, ")")
+message(
+  "found ",
+  length(product_urls),
+  " product URLs (saved to ",
+  urls_file,
+  ")"
+)
 
 # --- 1c. product pages -----------------------------------------------------
 
@@ -109,12 +127,15 @@ slug_to_file <- function(url) {
 }
 
 for (i in seq_along(product_urls)) {
-  url  <- product_urls[i]
+  url <- product_urls[i]
   dest <- slug_to_file(url)
-  if (file.exists(dest)) next
+  if (file.exists(dest)) {
+    next
+  }
   message(sprintf("[%d/%d] %s", i, length(product_urls), basename(dest)))
   html <- tryCatch(fetch(url, settle = 1.5), error = function(e) {
-    message("  failed: ", conditionMessage(e)); NULL
+    message("  failed: ", conditionMessage(e))
+    NULL
   })
   if (!is.null(html)) writeLines(html, dest)
 }
