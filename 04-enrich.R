@@ -99,6 +99,7 @@ extracted <- batch_chat_structured(
 
 parsed_titles <- tibble(title = titles) |>
   bind_cols(as_tibble(extracted)) |>
+  select(-any_of(".error")) |>
   rename(model_size = size)
 
 write_parquet(parsed_titles, "04-parsed-titles.parquet")
