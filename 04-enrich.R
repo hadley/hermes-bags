@@ -166,11 +166,11 @@ leather_simple <- batch_chat_structured(
 
 colour_lookup <- tibble(
   colour = all_colours,
-  simple_colour = colour_simple$simple
+  colour_simple = colour_simple$simple
 )
 leather_lookup <- tibble(
   leather = all_leathers,
-  simple_leather = leather_simple$simple
+  leather_simple = leather_simple$simple
 )
 
 write_parquet(colour_lookup, "04-simplified-colours.parquet")
@@ -241,21 +241,24 @@ classify_full_set <- function(x) {
 out <- d |>
   left_join(parsed_titles, by = "title") |>
   mutate(
-    width_cm = as.integer(round(as.numeric(dims[, 2]))),
-    height_cm = as.integer(round(as.numeric(dims[, 3]))),
-    depth_cm = as.integer(round(as.numeric(dims[, 4]))),
-    primary_colour = first_component(colour),
-    primary_leather = first_component(leather),
+    width = as.integer(round(as.numeric(dims[, 2]))),
+    height = as.integer(round(as.numeric(dims[, 3]))),
+    depth = as.integer(round(as.numeric(dims[, 4]))),
+    colour_primary = first_component(colour),
+    leather_primary = first_component(leather),
     condition = classify_condition(short_description),
     has_receipt = classify_receipt(description),
     full_set = classify_full_set(description)
   ) |>
-  left_join(colour_lookup, by = c(primary_colour = "colour")) |>
-  left_join(leather_lookup, by = c(primary_leather = "leather"))
+  left_join(colour_lookup, by = c(colour_primary = "colour")) |>
+  left_join(leather_lookup, by = c(leather_primary = "leather")) |>
+  select(-size) |>
+  relocate(colour_primary, colour_simple, .after = colour) |>
+  relocate(leather_primary, leather_simple, .after = leather)
 
-write_parquet(out, "04-hermes-bags.parquet")
+write_parquet(out, "hermes-bags.parquet")
 message(
-  "wrote 04-hermes-bags.parquet (",
+  "wrote hermes-bags.parquet (",
   nrow(out),
   " rows, ",
   ncol(out),
