@@ -188,6 +188,65 @@ first_component <- function(x) {
   trimws(stringr::str_extract(x, "^[^,]+"))
 }
 
+# Hermès blind stamp: a single letter giving the year of manufacture. The same
+# letter means different years in different eras, so detect square-shape stamps
+# (1997-2014) and otherwise assume the modern no-shape era (2015-). The listings
+# usually also state a year next to the stamp (e.g. "B Stamp 2023"), but ~15% of
+# the time that is the seller's listing/purchase year and contradicts the stamp
+# letter (e.g. "W Stamp 2025" when W is always 2024), so we trust the letter, not
+# the written year. The modern run below is confirmed by the dominant
+# letter/year pairing across the listings.
+stamp_to_year <- function(letter, square) {
+  modern <- c(
+    T = 2015L,
+    X = 2016L,
+    A = 2017L,
+    C = 2018L,
+    D = 2019L,
+    Y = 2020L,
+    Z = 2021L,
+    U = 2022L,
+    B = 2023L,
+    W = 2024L,
+    K = 2025L,
+    G = 2026L
+  )
+  square_era <- c(
+    A = 1997L,
+    B = 1998L,
+    C = 1999L,
+    D = 2000L,
+    E = 2001L,
+    F = 2002L,
+    G = 2003L,
+    H = 2004L,
+    I = 2005L,
+    J = 2006L,
+    K = 2007L,
+    L = 2008L,
+    M = 2009L,
+    N = 2010L,
+    O = 2011L,
+    P = 2012L,
+    Q = 2013L,
+    R = 2014L
+  )
+  pick <- ifelse(
+    square,
+    square_era[letter],
+    coalesce(modern[letter], square_era[letter])
+  )
+  as.integer(unname(pick))
+}
+
+# The stamp letter is the single standalone letter just before "stamp" /
+# "square stamp", e.g. "... Gold Hardware / B Stamp 2023".
+extract_stamp <- function(x) {
+  toupper(stringr::str_match(x, "(?i)\\b([a-z])\\b\\s+(?:square\\s+)?stamp")[,
+    2
+  ])
+}
+
 classify_condition <- function(x) {
   s <- tolower(x)
   case_when(
@@ -246,6 +305,19 @@ out <- d |>
     depth = as.integer(round(as.numeric(dims[, 4]))),
     colour_primary = first_component(colour),
     leather_primary = first_component(leather),
+    # The stamp lives mostly in short_description; fall back to description.
+    stamp = coalesce(
+      extract_stamp(short_description),
+      extract_stamp(description)
+    ),
+    year = stamp_to_year(
+      stamp,
+      stringr::str_detect(
+        coalesce(short_description, ""),
+        "(?i)square\\s+stamp"
+      ) |
+        stringr::str_detect(coalesce(description, ""), "(?i)square\\s+stamp")
+    ),
     condition = classify_condition(short_description),
     has_receipt = classify_receipt(description),
     full_set = classify_full_set(description)
