@@ -1,0 +1,162 @@
+version: 0.1.0
+
+tables:
+  hermes_bags:
+    description: >
+      One row per Hermès handbag listing scraped from the Love Luxury resale
+      site. 
+    source:
+      parquet: hermes-bags.parquet
+    columns:
+      - name: title
+        type: string
+        constraints: [required]
+        description: Listing title as shown on the site, always prefixed "Hermès".
+        examples:
+          - "Hermès 24/24 35 Togo Black Gold Hardware"
+          - "Hermès Birkin 25 Sellier Gris Etain Epsom Gold Hardware"
+          - "Hermès Kelly Pochette Noir Swift Palladium Hardware"
+
+      - name: price
+        type: number(quantity)
+        constraints: [required]
+        description: Asking price in GBP.
+        range: [300, 200000]
+
+      - name: short_description
+        type: string
+        description: >
+          One-line summary, typically `title` plus the stamp and condition,
+          Primary source for `stamp` and `year`.
+        examples:
+          - "Hermès 24/24 35 Togo Black Gold Hardware / B stamp 2023 Box Fresh"
+          - "Hermès Birkin 25 Craie Togo Palladium Hardware / B stamp 2024 Box Fresh"
+
+      - name: description
+        type: string
+        description: >
+          Free-text marketing/condition paragraph(s). Source for `condition`,
+          `has_receipt` and `full_set`, and fallback source for `stamp`/`year`.
+        examples:
+          - "This bag is in a box fresh condition and comes to you as a full set including the authentication."
+          - "This bag is Box Fresh, comes to you as a full set with receipt"
+
+      - name: model
+        type: string
+        description: >
+          Bag model, including any sub-variant qualifier (LLM-extracted from
+          `title`). 130 distinct values; spelling/qualifiers are not normalised
+          (e.g. "Kelly Pochette", "HAC A DOS" vs "Hac-A-Dos").
+        examples: ["Birkin", "Kelly", "Constance", "Birkin 25 Sellier", "Kelly Pochette"]
+
+      - name: model_size
+        type: number(ordinal)
+        description: >
+          Numeric model size in cm (the "25" in "Birkin 25"). Extracted from
+          `title`, missing when the model carries no numeric size. Distinct 
+          from the physical `width`/`height`/`depth`.
+        range: [15, 65]
+
+      - name: colour
+        type: string
+        description: >
+          Full colour name(s) from `title`, comma-separated and primary-first
+          for multi-colour bags, e.g. "Bleu Marine, Orange H, Bleu Obscure".
+        examples: ["Noir", "Gold", "Bleu Marine", "Vert Yucca", "Bleu de Prusse"]
+
+      - name: colour_primary
+        type: string
+        description: Primary (first) component of `colour`.
+        examples: ["Black", "Gold", "Bleu Marine", "Caban", "Havane"]
+
+      - name: colour_simple
+        type: enum
+        description: Primary colour mapped to a common English colour word.
+        values:
+          [beige, black, blue, brown, gold, green, grey, multi, orange, pink,
+           purple, red, silver, tan, white, yellow]
+
+      - name: leather
+        type: string
+        description: >
+          Full leather/material name(s) from `title`, comma-separated and
+          primary-first for multi-material bags.
+        examples: ["Togo", "Epsom", "Swift", "Clemence", "Togo, Swift, Matte Alligator"]
+
+      - name: leather_primary
+        type: string
+        description: Primary (first) component of `leather`.
+        examples: ["Togo", "Clemence", "Swift", "Chèvre", "Alligator"]
+
+      - name: leather_simple
+        type: enum
+        description: Primary leather mapped to its plain-English material/source.
+        values:
+          [alligator, canvas, cow, crocodile, felt, goat, leather, lizard,
+           ostrich, other, plush fabric, silk, suede]
+
+      - name: hardware
+        type: string
+        description: >
+          Hardware finish from `title`. Not normalised, so finish and tone 
+          variants coexist.
+        examples: ["Gold", "Palladium", "Rose Gold", "Permabrass", "Brushed Palladium"]
+
+      - name: width
+        type: number(quantity)
+        description: >
+          Physical width in cm.
+        range: [2, 65]
+
+      - name: height
+        type: number(quantity)
+        description: Physical height in cm.
+        range: [2, 57]
+
+      - name: depth
+        type: number(quantity)
+        description: Physical depth in cm.
+        range: [1, 26]
+
+      - name: stamp
+        type: enum
+        description: >
+          Hermès blind-stamp letter denoting the year of manufacture, parsed by
+          regex from the descriptions.
+        values:
+          [A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, W, X, Y, Z]
+
+      - name: year
+        type: number(ordinal)
+        description: >
+          Year of manufacture, derived from `stamp` via the Hermès stamp-year
+          mapping (square-shape era 1997–2014 vs. modern no-shape era 2015–),
+          This is not consistent with the year written in the listing, which is 
+          often the seller's listing/purchase year and disagrees with the stamp 
+          ~15% of the time.
+        range: [1997, 2026]
+
+      - name: condition
+        type: enum
+        description: Condition grade classified by regex from `description`.
+        values: ["Box Fresh", "Excellent Pre-Loved", "Pre-Loved"]
+
+      - name: has_receipt
+        type: boolean
+        description: >
+          Whether the listing states it includes the original receipt
+          (regex over `description`).
+        values: [true, false]
+
+      - name: full_set
+        type: boolean
+        description: >
+          Whether the listing states it is a "full set" (box, dustbag,
+          lock/key, etc.), regex over `description`.
+        values: [true, false]
+
+glossary:
+  box fresh: Unused / as-new condition, never worn.
+  pre-loved: Previously owned and used.
+  full set: Bag sold with all accessories — box, dustbag, lock, keys, clochette, rainjacket.
+  stamp: A blind-embossed letter inside the bag encoding its year of manufacture.
